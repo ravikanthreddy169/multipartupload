@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:s3="http://www.mulesoft.org/schema/mule/s3" xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/s3 http://www.mulesoft.org/schema/mule/s3/current/mule-s3.xsd">
+	<file:config name="File_Config" doc:name="File Config" doc:id="daa9dfe9-0f05-497f-baa2-1b82daa3f1d1" >
+		<file:connection workingDir="${folder}" />
+	</file:config>
+	<s3:config name="Amazon_S3_Configuration" doc:name="Amazon S3 Configuration" doc:id="39b528ae-03c0-47aa-862b-c1a1f1873087" >
+		<s3:basic-connection accessKey="${AWS_ACCESS_KEY_ID}" secretKey="${AWS_SECRET_ACCESS_KEY}" region="${region}"/>
+	</s3:config>
+	<configuration-properties doc:name="Configuration properties" doc:id="ed69f213-823b-4e10-844f-1af91ae545f1" file="config.properties" />
+	<flow name="multiFlow" doc:id="5668d99c-72a8-4e04-ad62-cc3cbd7ef644" >
+		<scheduler doc:name="Scheduler" doc:id="74905281-2a80-4841-bfc7-3c75d533c595" >
+			<scheduling-strategy >
+				<fixed-frequency frequency="500000000000000"/>
+			</scheduling-strategy>
+		</scheduler>
+		<set-variable value='${bucket}' doc:name="Bucket Name" doc:id="11fe1b55-92ce-42ef-8afa-9957bca14f10" variableName="bucketName"/>
+		            <logger level="INFO" doc:name="Logger" doc:id="6412d923-0e24-4d51-8965-1670952aaa31" message="BUCKET NAME: #[payload.name]"/>
+                    <set-variable value="lorem.rtf" doc:name="Set filename" variableName="fileName" />
+		<set-variable value="${partSize}" doc:name="Set part size" variableName="partSize"/>
+                    <set-variable value='${origFile}' doc:name="Set key" variableName="key"/>
+            <set-variable value="${lastPartSize}" doc:name="Set last part size" variableName="lastPartSize"/>
+            <set-variable value="#[[]]" doc:name="Set etags" variableName="etags"/>
+            <set-variable value='${destFile}' doc:name="Set destination key" variableName="destinationKey" />
+		
+            <s3:initiate-multipart-upload doc:name="Initiate multipart upload" config-ref="Amazon_S3_Configuration" bucketName="#[vars.bucketName]" key='#[vars.key]'/>
+		 <set-variable value="#[payload]" doc:name="Set uploadId" variableName="uploadId"/>
+		            <logger level="INFO" doc:name="Logger" doc:id="5614338c-180b-47c2-b352-a09f2067caa8" message="UPLOAD ID: #[vars.uploadId]"/>
+		
+<file:read doc:name="Read" config-ref="File_Config" path="#[vars.fileName]">
+                <non-repeatable-stream />
+            </file:read>	
+            	<set-variable value="#[payload]" doc:name="Set file" variableName="file"/>
+		<foreach doc:name="For Each" doc:id="51b5901c-825c-4a9c-8584-a226b8824578"  collection="#[[1,2,3]]" >
+				<logger level="INFO" doc:name="Logger" doc:id="c1ec7050-f063-4764-a00d-b39c5548871e" message="PART SIZE: #[vars.partSize]"/>
+                <logger level="INFO" doc:name="Logger" doc:id="ff26e6e2-a310-4126-b333-fc55e968d557" message="COUNTER INSIDE FOREACH: #[vars.counter]"/>
+        <s3:upload-part config-ref="Amazon_S3_Configuration" bucketName="#[vars.bucketName]" key="#[vars.key]" uploadId="#[vars.uploadId]" partSize="#[vars.partSize]" partNumber="#[vars.counter]">
+                    <s3:content><![CDATA[#[vars.file]]]></s3:content>
+                </s3:upload-part>	
+                <logger level="INFO" doc:name="Logger" doc:id="9010cb3d-d911-4123-807f-47ea3992a11b" message="ETAG AFTER UPLOAD PART: #[payload.etag], PART NUMBER AFTER UPLOAD PART: #[payload.partNumber]"/>
+
+                <ee:transform doc:name="Transform Message">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+vars.etags ++ [{
+	etag: payload.etag,
+	partNumber: payload.partNumber
+}]]]></ee:set-payload>
+                    </ee:message>
+                </ee:transform>
+                <set-variable value="#[payload]" doc:name="update etags" variableName="etags" />
+                <logger level="INFO" doc:name="Logger" doc:id="7697ad53-8343-45b0-ac08-b70c97821ccc" message="ETAGS: #[vars.etags]"/>
+		</foreach>
+		            <s3:upload-part partSize="#[vars.lastPartSize]" doc:name="Upload part" config-ref="Amazon_S3_Configuration" bucketName="#[vars.bucketName]" key="#[vars.key]" uploadId="#[vars.uploadId]" partNumber="4" isLastPart="true">
+                <s3:content><![CDATA[#[vars.file]]]></s3:content>
+            </s3:upload-part>
+            <logger level="INFO" doc:name="Logger" doc:id="1c31704f-5e23-4968-98e0-74d37d05831b" message="ETAG AFTER LAST UPLOAD PART: #[payload.etag], PART NUMBER AFTER LAST UPLOAD PART: #[payload.partNumber]"/>
+
+            <ee:transform doc:name="Transform Message">
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+vars.etags ++ [{
+	etag: payload.etag,
+	partNumber: payload.partNumber
+}]]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+            <set-variable value="#[payload]" doc:name="update etags" variableName="etags"/>
+            <logger level="INFO" doc:name="Logger" doc:id="a9d835fb-eb84-4a15-aa97-f49a8837e178" message="ETAGS AFTER LAST UPLOADS: #[vars.etags]"/>
+
+            <!-- Finish multipart upload  -->
+            <s3:complete-multipart-upload doc:name="Complete multipart upload" config-ref="Amazon_S3_Configuration" bucketName="#[vars.bucketName]" key='#[vars.key]' uploadId="#[vars.uploadId]">
+                <s3:part-e-tags><![CDATA[#[vars.etags]]]></s3:part-e-tags>
+            </s3:complete-multipart-upload>
+	</flow>
+</mule>
