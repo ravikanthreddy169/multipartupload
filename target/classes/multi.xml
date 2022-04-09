@@ -21,8 +21,8 @@ http://www.mulesoft.org/schema/mule/s3 http://www.mulesoft.org/schema/mule/s3/cu
 			</scheduling-strategy>
 		</scheduler>
 		<set-variable value='${bucket}' doc:name="Bucket Name" doc:id="11fe1b55-92ce-42ef-8afa-9957bca14f10" variableName="bucketName"/>
-		            <logger level="INFO" doc:name="Logger" doc:id="6412d923-0e24-4d51-8965-1670952aaa31" message="BUCKET NAME: #[payload.name]"/>
-                    <set-variable value="lorem.rtf" doc:name="Set filename" variableName="fileName" />
+                    <logger level="INFO" doc:name="Logger" doc:id="cc4f0b38-9509-4cdb-a7c9-be9fe01cd532" message='"hello"'/>
+		<set-variable value="lorem.rtf" doc:name="Set filename" variableName="fileName" />
 		<set-variable value="${partSize}" doc:name="Set part size" variableName="partSize"/>
                     <set-variable value='${origFile}' doc:name="Set key" variableName="key"/>
             <set-variable value="${lastPartSize}" doc:name="Set last part size" variableName="lastPartSize"/>
